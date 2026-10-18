@@ -5,6 +5,7 @@ let stream=null,raf=null,last=null,sourceKind="none",lastTime=0,busy=false;
 function number(id){const el=$(id);const v=Number(el.value);if(el.value===""||!Number.isFinite(v)||!el.checkValidity())throw new Error("입력값을 확인해: "+el.parentElement.textContent.trim());return v;}
 function config(){return {size:number("size")/1000,id:number("markerId")};}
 function intrinsics(w,h){
+ if($("mode").value==="profile")return window.Calibration.KFor(w,h);
  if($("mode").value==="calibrated"){const sx=w/number("kw"),sy=h/number("kh");return {fx:number("fx")*sx,fy:number("fy")*sy,cx:number("cx")*sx,cy:number("cy")*sy};}
  const f=w/(2*Math.tan(number("fov")*Math.PI/360));return {fx:f,fy:f,cx:w/2,cy:h/2};
 }
@@ -19,7 +20,7 @@ function show(){
  $("matrix").textContent=PoseMath.matrix(pose).map(row=>row.map(v=>(v>=0?" ":"")+v.toFixed(5)).join("  ")).join("\n");
  $("tag").textContent="ID "+last.id;$("export").disabled=false;
  const ambiguity=last.pose.alternativeError!==null&&last.pose.alternativeError-last.pose.error<.5;
- $("quality").textContent=(last.kind==="sample"?"SAMPLE · ":"")+"재투영 RMS "+last.pose.error.toFixed(2)+" px"+(ambiguity?" · 평면 회전 모호성 주의":"")+" · "+(last.mode==="synthetic"?"합성 K":last.mode==="fov"?"근사 K":"입력 K, 왜곡 미보정");
+ $("quality").textContent=(last.kind==="sample"?"SAMPLE · ":"")+"재투영 RMS "+last.pose.error.toFixed(2)+" px"+(ambiguity?" · 평면 회전 모호성 주의":"")+" · "+(last.mode==="synthetic"?"합성 K":last.mode==="profile"?"보정 K + 왜곡 보정":last.mode==="fov"?"근사 K":"입력 K, 왜곡 미보정");
 }
 function drawOutline(corners){
  ctx.strokeStyle="#c9f485";ctx.lineWidth=3;ctx.beginPath();corners.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();ctx.stroke();
@@ -32,8 +33,10 @@ function drawAxes(pose,K,size){
  });
 }
 function process(Koverride){
+ const image=ctx.getImageData(0,0,canvas.width,canvas.height);
+ const markers=detector.detect(image);
+ if(window.Calibration?.isCollecting()){window.Calibration.capture(markers,image);$("status").textContent="보정 시점 수집 중";return false;}
  const c=config(),K=Koverride||intrinsics(canvas.width,canvas.height);
- const markers=detector.detect(ctx.getImageData(0,0,canvas.width,canvas.height));
  const marker=markers.find(m=>m.id===c.id);
  $("resolution").textContent="처리 영상: "+canvas.width+" × "+canvas.height+" · fx "+K.fx.toFixed(1)+" / fy "+K.fy.toFixed(1)+" px";
  if(!marker){clearPose(markers.length?"다른 ID 검출: "+markers.map(m=>m.id).join(", "):"마커를 찾지 못했어. 밝기·크기·ID를 확인해.");$("status").textContent="마커 탐색 중";return false;}
@@ -47,6 +50,7 @@ function process(Koverride){
 }
 function reveal(){canvas.style.display="block";$("empty").hidden=true;}
 function stopCamera(){
+ window.Calibration?.pause();
  if(raf!==null)cancelAnimationFrame(raf);raf=null;
  if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$("video").srcObject=null;
  $("start").disabled=false;$("stop").disabled=true;
@@ -66,7 +70,7 @@ $("start").onclick=async()=>{
  try{
  config();if(!navigator.mediaDevices?.getUserMedia)throw new Error("HTTPS에서 Safari 또는 Chrome으로 열어줘.");
  stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}}});
- $("video").srcObject=stream;await $("video").play();reveal();$("stop").disabled=false;
+ $("video").srcObject=stream;await $("video").play();window.Calibration?.onCamera();reveal();$("stop").disabled=false;
  $("message").textContent="후면 카메라에서 지정한 마커를 찾는 중. 입력 크기는 검은 정사각형 한 변이야.";
  raf=requestAnimationFrame(frame);
  }catch(e){stopCamera();$("status").textContent="카메라 시작 실패";$("message").textContent=e.name==="NotAllowedError"?"카메라 권한을 허용한 뒤 다시 시작해. 앱 내 브라우저라면 Safari/Chrome으로 열어줘.":e.message;}
@@ -82,9 +86,9 @@ function updateMarker(){try{$("marker").innerHTML=markerSVG();}catch(e){$("messa
 $("download").onclick=()=>{try{saveText("ARUCO_MIP_36h12-"+config().id+"-"+number("size")+"mm.svg",markerSVG(),"image/svg+xml");}catch(e){$("message").textContent=e.message;}};
 $("print").onclick=()=>{try{if(number("size")>150)throw new Error("A4 인쇄는 한 변 150 mm 이하를 권장해. 큰 마커는 SVG로 저장해.");$("printArea").innerHTML=markerSVG()+"<p>ARUCO_MIP_36h12 · ID "+config().id+" · Black square: "+number("size")+" mm</p><p>Print at 100% scale. Measure the black square after printing.</p>";window.print();}catch(e){$("message").textContent=e.message;}};
 $("direction").onchange=show;
-$("mode").onchange=()=>{const manual=$("mode").value==="calibrated";$("fovFields").hidden=manual;$("kFields").hidden=!manual;$("modeBadge").textContent=manual?"INPUT K":"APPROXIMATE";clearPose("설정 변경됨. 새 프레임 또는 사진을 측정해.");};
+$("mode").onchange=()=>{const manual=$("mode").value==="calibrated";$("fovFields").hidden=$("mode").value!=="fov";$("kFields").hidden=!manual;$("modeBadge").textContent=$("mode").value==="profile"?"CALIBRATED":manual?"INPUT K":"APPROXIMATE";clearPose("설정 변경됨. 새 프레임 또는 사진을 측정해.");};
 ["size","markerId","fov","fx","fy","cx","cy","kw","kh"].forEach(id=>$(id).addEventListener("input",()=>{clearPose("설정 변경됨. 새 프레임 또는 사진을 측정해.");if(id==="size"||id==="markerId")updateMarker();}));
-$("export").onclick=()=>{if(!last)return;const pose=$("direction").value==="inverse"?PoseMath.inverse(last.pose):last.pose;saveText("marker-pose.json",JSON.stringify({...last,transform:$("direction").value==="inverse"?"T_marker_camera":"T_camera_marker",matrix:PoseMath.matrix(pose),translation_m:pose.t,rotation:pose.R,euler_zyx_deg:PoseMath.euler(pose.R),camera_axes:"x right, y down, z forward",marker_axes:"x right, y down, z into marker",distortion_corrected:false},null,2),"application/json");};
+$("export").onclick=()=>{if(!last)return;const pose=$("direction").value==="inverse"?PoseMath.inverse(last.pose):last.pose;saveText("marker-pose.json",JSON.stringify({...last,transform:$("direction").value==="inverse"?"T_marker_camera":"T_camera_marker",matrix:PoseMath.matrix(pose),translation_m:pose.t,rotation:pose.R,euler_zyx_deg:PoseMath.euler(pose.R),camera_axes:"x right, y down, z forward",marker_axes:"x right, y down, z into marker",distortion_corrected:!!last.K.dist,distortion_coefficients:last.K.dist||[0,0,0,0,0]},null,2),"application/json");};
 $("photo").onchange=async e=>{
  const file=e.target.files[0];if(!file)return;stopCamera();clearPose();sourceKind="photo";
  const url=URL.createObjectURL(file);
@@ -105,3 +109,4 @@ $("test").onclick=async()=>{
 document.addEventListener("visibilitychange",()=>{if(document.hidden&&stream){stopCamera();clearPose("백그라운드로 이동하여 카메라를 중지했어.");$("status").textContent="중지됨";}});
 window.addEventListener("pagehide",stopCamera);
 updateMarker();
+

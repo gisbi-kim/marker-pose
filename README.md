@@ -24,11 +24,11 @@ Overlay blue arrow indicates **negative marker Z**, toward the observer.
 Default horizontal FOV 65 degrees is an assumption, not a calibrated phone model.
 Enter fx, fy, cx, cy and calibration image dimensions for better metric accuracy.
 K is scaled to processing resolution. Lens, crop and image aspect ratio must match.
-Lens distortion is NOT corrected in this version. Use low-distortion/rectified imagery.
+Manual-K mode assumes zero distortion. Browser calibration profiles apply Brown-Conrady distortion correction to detected corners and to overlay/reprojection calculations.
 Planar pose ambiguity, distant or small markers, blur and rolling shutter reduce accuracy.
 Reprojection RMS measures fit, not absolute accuracy.
 Detection processes frames up to 960 pixels wide; photos up to 1280.
-The browser does not upload images. Third-party runtime CDNs are not required.
+The browser does not upload images. Basic tracking needs no CDN. Calibration loads pinned @deluksic/opencv-calibration-wasm 0.2.5 from jsDelivr; no image or corner data is uploaded.
 A single requested marker ID is tracked; lost detections clear live values.
 
 ## Development and validation
@@ -44,3 +44,25 @@ Vendored MIT-licensed [js-aruco2](https://github.com/damianofalcioni/js-aruco2),
 copyright Damiano Falcioni and Juan Mellado, fetched 2026-10-19.
 Upstream copyright/license notices are retained in vendor files.
 Coplanar POSIT: Oberkampf, DeMenthon and Davis.
+
+## Automatic calibration
+Print the app's dedicated 3x4 ARUCO_MIP_36h12 board (IDs 0-11).
+Marker black edge: 35 mm; gap: 10 mm. Use 100% uniform print scale and a rigid flat backing.
+Hold the board still and move the phone (or vice versa), pausing at varied viewpoints.
+The collector requires all 12 markers (48 corners), sufficient size/sharpness/stability,
+and diverse positions/tilts. Goal: 24 views; minimum: 18.
+OpenCV calibrateCameraRO with iFixedPoint=-1 uses the fixed-board calibration method:
+LM joint reprojection optimization of fx, fy, cx, cy, k1, k2, p1, p2 and per-view extrinsics.
+Skew and k3 are fixed at zero. Every fifth view is withheld from intrinsic calibration
+and evaluated using solvePnP/projectPoints. Fits above 1.5 px training or 2 px holdout RMS
+and implausible parameters are rejected. These gates do not guarantee absolute accuracy.
+The solve runs in a module Web Worker. Cancel/timeout terminates the worker.
+Save/apply stores the profile in localStorage and auto-applies only for matching
+deviceId, capture dimensions and reported zoom. Focus/crop changes not exposed by the
+browser cannot be detected; keep physical lens, zoom and capture settings unchanged.
+Saved profiles are intentionally not auto-applied to uploaded photos.
+The synthetic optimization test never overwrites or saves a real calibration profile.
+Run node test-calibration.cjs for distortion, board detection and sampling-gate checks.
+Actual printed-board phone performance still requires a physical validation session.
+
+Calibration WASM package: https://github.com/deluksic/opencv-calibration-wasm (MIT wrapper; OpenCV).
