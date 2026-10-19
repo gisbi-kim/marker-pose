@@ -1,8 +1,42 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101919"><title>Marker Pose · APRL</title><link rel="stylesheet" href="style.css?v=2"></head>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101919"><title>Marker Pose · APRL</title><link rel="stylesheet" href="style.css?v=2"><style>
+/* Recording layout: keep the full camera image and live pose in one viewport. */
+.view-toggle{display:block;margin:0 0 14px auto}
+body.tight-view{height:100dvh;overflow:hidden}
+body.tight-view>header,body.tight-view .intro,body.tight-view main>.settings,body.tight-view .calibration,body.tight-view .guide,body.tight-view footer{display:none}
+body.tight-view main{height:100dvh;max-width:none;padding:max(6px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:6px}
+body.tight-view .view-toggle{flex:none;margin:0;align-self:flex-end;padding:6px 12px;min-height:34px;font-size:12px}
+body.tight-view .workspace{flex:1;min-height:0;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(100px,1fr) auto;gap:6px}
+body.tight-view .panel{padding:9px;border-radius:10px;min-width:0;min-height:0}
+body.tight-view .panel-head{margin-bottom:5px;gap:4px}
+body.tight-view .panel-head b{font-size:12px}
+body.tight-view .viewer{display:flex;flex-direction:column}
+body.tight-view .stage{flex:1;min-height:0}
+body.tight-view .stage canvas{position:absolute;inset:0;width:100%;height:100%;max-height:none;object-fit:contain}
+body.tight-view #empty{padding:4px;font-size:11px}
+body.tight-view #empty .reticle,body.tight-view #empty p{display:none}
+body.tight-view #empty h2{font-size:13px}
+body.tight-view .toolbar{margin-top:6px;gap:6px}
+body.tight-view .toolbar button{padding:5px 10px;min-height:32px;font-size:12px}
+body.tight-view .viewer .upload,body.tight-view #message,body.tight-view .results details,body.tight-view #export,body.tight-view .results>.note:not(#quality){display:none}
+body.tight-view .select-label{font-size:0}
+body.tight-view #direction{margin:0;padding:3px 6px;min-height:30px;height:30px;font-size:11px}
+body.tight-view .distance{padding:3px 0;gap:10px}
+body.tight-view .distance strong{font-size:30px}
+body.tight-view .metrics{gap:5px}
+body.tight-view .metrics div{padding:6px 8px}
+body.tight-view .metrics b{font-size:19px;margin-top:3px;line-height:1.2}
+body.tight-view .metrics span{font-size:10px}
+body.tight-view #quality{font-size:10px;line-height:1.3;margin:5px 0 0}
+body.tight-view .pill{padding:4px 6px}
+@media(min-aspect-ratio:4/3){
+body.tight-view .workspace{grid-template-columns:minmax(0,1.4fr) minmax(280px,1fr);grid-template-rows:minmax(0,1fr)}
+body.tight-view .results{overflow:auto}
+}
+</style></head>
 <body><header><a href="./" class="brand"><span class="logo">⌗</span> MARKER POSE <small>APRL / Spatial tools</small></a><span class="pill">ON-DEVICE VISION</span></header>
 <main><section class="intro"><div class="eyebrow">CAMERA → MARKER · 6-DOF</div><h1>비추면, 위치가 보인다.</h1><p>알려진 크기의 마커 한 장으로 카메라와 마커 사이의 상대 pose를 측정해.</p></section>
-<div class="workspace"><section class="viewer panel"><div class="panel-head"><b>Live view</b><span id="status" role="status" aria-live="polite">카메라 대기</span></div><div class="stage"><video id="video" playsinline muted></video><canvas id="view"></canvas><div id="empty"><div class="reticle">⌗</div><h2>마커를 화면 안에 비춰줘</h2><p>후면 카메라 · 마이크 사용 없음<br>영상은 서버로 전송되지 않아.</p></div></div><div class="toolbar"><button id="start" class="primary">카메라 시작</button><button id="stop" disabled>중지</button><button id="test">샘플 테스트</button><label class="upload">사진으로 측정<input id="photo" type="file" accept="image/*"></label></div><p id="message" class="note">아래에서 마커를 내려받아 인쇄하거나 다른 화면에 띄워줘.</p></section>
+<button id="tightView" class="view-toggle" type="button" aria-pressed="false">타이트 뷰 · 화면녹화</button><div class="workspace"><section class="viewer panel"><div class="panel-head"><b>Live view</b><span id="status" role="status" aria-live="polite">카메라 대기</span></div><div class="stage"><video id="video" playsinline muted></video><canvas id="view"></canvas><div id="empty"><div class="reticle">⌗</div><h2>마커를 화면 안에 비춰줘</h2><p>후면 카메라 · 마이크 사용 없음<br>영상은 서버로 전송되지 않아.</p></div></div><div class="toolbar"><button id="start" class="primary">카메라 시작</button><button id="stop" disabled>중지</button><button id="test">샘플 테스트</button><label class="upload">사진으로 측정<input id="photo" type="file" accept="image/*"></label></div><p id="message" class="note">아래에서 마커를 내려받아 인쇄하거나 다른 화면에 띄워줘.</p></section>
 <aside class="panel results"><div class="panel-head"><b>Relative pose</b><span id="tag" class="pill">NO MARKER</span></div><label class="select-label">출력 기준<select id="direction"><option value="forward">카메라 기준 마커 · T_camera_marker</option><option value="inverse">마커 기준 카메라 · T_marker_camera</option></select></label><div class="distance"><span>직선 거리</span><strong id="distance">—</strong><small>m</small></div><div class="metrics"><div><span>X / m</span><b id="tx">—</b></div><div><span>Y / m</span><b id="ty">—</b></div><div><span>Z / m</span><b id="tz">—</b></div><div><span>Roll / °</span><b id="roll">—</b></div><div><span>Pitch / °</span><b id="pitch">—</b></div><div><span>Yaw / °</span><b id="yaw">—</b></div></div><p id="quality" class="note">검출된 마커를 기다리는 중</p><details><summary>4 × 4 변환행렬</summary><pre id="matrix">—</pre></details><button id="export" disabled>현재 pose JSON 저장</button><p class="note">p_camera = R · p_marker + t<br>카메라: X 오른쪽 · Y 아래 · Z 전방<br>마커: X 오른쪽 · Y 아래 · Z 종이 안쪽<br>마커 원점: 중심 / 회전: Rz(yaw) Ry(pitch) Rx(roll)</p></aside></div>
 <div class="settings"><section class="panel"><div class="panel-head"><b>01 / Marker</b></div><div class="fields"><label>검은 테두리 바깥쪽 한 변 (mm)<input id="size" type="number" min="1" max="2000" step="0.1" value="100"></label><label>마커 ID (0–249)<input id="markerId" type="number" min="0" max="249" step="1" value="0"></label></div><p class="note">Dictionary: <b>ARUCO_MIP_36h12</b>. 이 페이지에서 만든 마커를 사용해. 일반 ArUco 4×4나 AprilTag와는 달라. 지정한 ID만 추적해.</p><div class="marker-row"><div id="marker"></div><div><button id="download">마커 SVG 저장</button><button id="print">실제 크기로 인쇄</button><p class="note">인쇄 배율 100%. 흰 여백을 제외한 검은 정사각형을 자로 재서 크기를 입력해.</p></div></div></section>
 <section class="panel"><div class="panel-head"><b>02 / Camera model</b><span id="modeBadge" class="pill warn">APPROXIMATE</span></div><label>내부 파라미터<select id="mode"><option value="fov">근사 · 수평 화각으로 추정</option><option value="profile">이 폰에서 보정한 K + 왜곡계수</option><option value="calibrated">직접 입력 · 보정된 K</option></select></label><div id="fovFields"><label>현재 영상의 수평 화각 (°)<input id="fov" type="number" step="any" min="10" max="150" value="65"></label><p class="note">65°는 기본 가정이야. 실제 폰·렌즈·영상 비율에 따라 달라져. 절대 거리의 정확도가 필요하면 같은 렌즈와 해상도로 카메라를 보정해.</p></div><div id="kFields" hidden><div class="fields"><label>fx (px)<input id="fx" type="number" step="any" value="1000" min="1"></label><label>fy (px)<input id="fy" type="number" step="any" value="1000" min="1"></label><label>cx (px)<input id="cx" type="number" step="any" value="640"></label><label>cy (px)<input id="cy" type="number" step="any" value="360"></label><label>보정 영상 width (px)<input id="kw" type="number" value="1280" min="1"></label><label>보정 영상 height (px)<input id="kh" type="number" value="720" min="1"></label></div><p class="note">동일한 영상 crop·렌즈를 사용해. 해상도는 자동 스케일링돼. 직접 K만 입력하는 모드는 왜곡을 보정하지 않아. 자동 보정 모드는 아래에서 수집한 왜곡계수까지 적용해.</p></div><p id="resolution" class="note">영상 해상도: —</p></section></div>
@@ -10,4 +44,21 @@
 <div class="calColumns"><div><b>1. 전용 보드 준비</b><p class="note">아래 12개 마커 보드를 100% 배율로 인쇄해 평평한 판에 붙여줘. 일반 체커보드나 단일 마커 대신 이 보드를 사용해.<br>검은 마커 한 변 35 mm · 간격 10 mm. 가로·세로 인쇄 비율도 확인해.</p><button id="calBoard">보정 보드 SVG 저장</button> <button id="calPrint">보정 보드 인쇄</button><p class="note">렌즈·줌을 고정해. 보드 전체가 보이도록 중앙·가장자리, 좌우·위아래 비스듬한 각도에서 잠깐씩 멈춰줘. 초광각/fisheye는 지원하지 않아.</p></div>
 <div><b>2. 자동 수집 · 계산</b><div class="toolbar"><button class="primary" id="calStart">보정 시작 · 새로 수집</button><button id="calPause">수집 중지</button><button id="calSolve" disabled>보정 계산</button><button id="calCancel" disabled>계산 취소</button></div><div class="calMeter"><progress id="calProgress" value="0" max="24"></progress><b id="calCount">0 / 24</b></div><p class="note" id="calStatus" role="status" aria-live="polite">시작하면 카메라를 켜고 좋은 시점을 자동 수집해. 목표 24개, 최소 18개.</p><p class="note">중복·움직임·흐림·작은 보드는 건너뛰어. 목표 수집 후 자동 계산돼. RMS는 픽셀 적합 오차이며 실제 거리 정확도를 보장하지 않아.</p></div></div>
 <details open><summary>3. 보정 결과</summary><pre id="calResult">—</pre><div class="toolbar"><button id="calApply" disabled>보정값 저장 · 적용</button><button id="calExport" disabled>저장된 보정 JSON 내보내기</button><button id="calTest">최적화 합성 테스트</button></div><p id="calSaved" class="note">저장된 보정 없음</p><p class="note">fx·fy·cx·cy와 k1·k2·p1·p2를 추정해. skew=0, k3=0으로 고정해. 저장값은 같은 카메라·해상도·줌에서만 자동 적용돼. 사진 측정에는 자동 적용하지 않아. 저장은 이 브라우저에만 유지돼.</p></details></section><section class="guide"><b>측정 팁</b><p>마커를 평평하게 붙이고 밝은 곳에서 네 모서리를 모두 보여줘. 정면·먼 거리에서는 평면 pose의 회전이 불안정하거나 뒤집힐 수 있어. 재투영 오차가 작아도 카메라 보정 오차까지 보장하는 건 아니야.</p></section><footer>APRL · Marker Pose <a href="https://github.com/gisbi-kim/marker-pose">GitHub ↗</a><span>Powered by js-aruco2 · Coplanar POSIT</span></footer></main><section id="printArea"></section>
-<script src="vendor/cv.js"></script><script src="vendor/aruco.js"></script><script src="vendor/svd.js"></script><script src="vendor/posit1.js"></script><script src="pose.js?v=2"></script><script src="calibration-core.js"></script><script src="app.js?v=2"></script><script src="calibration.js?v=2"></script></body></html>
+<script src="vendor/cv.js"></script><script src="vendor/aruco.js"></script><script src="vendor/svd.js"></script><script src="vendor/posit1.js"></script><script src="pose.js?v=2"></script><script src="calibration-core.js"></script><script src="app.js?v=2"></script><script src="calibration.js?v=2"></script>
+<script>
+(()=>{
+  const button=document.getElementById('tightView');
+  const setView=enabled=>{
+    document.body.classList.toggle('tight-view',enabled);
+    button.setAttribute('aria-pressed',String(enabled));
+    button.textContent=enabled?'일반 뷰로 돌아가기 ↗':'타이트 뷰 · 화면녹화';
+    const url=new URL(location.href);
+    if(enabled)url.searchParams.set('view','tight');else url.searchParams.delete('view');
+    history.replaceState(null,'',url);
+    window.scrollTo(0,0);
+  };
+  button.addEventListener('click',()=>setView(!document.body.classList.contains('tight-view')));
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.body.classList.contains('tight-view'))setView(false);});
+  if(new URLSearchParams(location.search).get('view')==='tight')setView(true);
+})();
+</script></body></html>
